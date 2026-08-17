@@ -7,6 +7,42 @@ troubleshooting, quota/cost analysis and evidence behind it.
 Everything here is **synthetic data only**. No PHI has been placed in any subscription referenced
 in this repository.
 
+### Read this first — every organisation name here is fictional
+
+The payers, contracts and members in this repository are placeholders. Nothing below refers to a
+real health plan, a real contract, or a real person.
+
+| Placeholder | What it stands for | Where you will see it |
+|---|---|---|
+| **Contoso Health Plan** | fictional payer A | `fhir-payera`, `/payera/*` routes |
+| **Fabrikam Medicare Advantage** | fictional payer B | `fhir-payerb`, `/payerb/*` routes |
+| **Northwind Health** | fictional payer C — appears only in the "add a third payer" demo step | `DEMO-SCRIPT.md` |
+| `CT-3456`, `CT-7788` | Contoso's two contracts — the pair that proves *logical* isolation within one payer | `meta.tag`, `_tag`, `Group` ids |
+| `CT-9001` | Fabrikam's single contract — the one that proves *physical* isolation between payers | as above |
+| `CT-5150` | Northwind's contract | demo step only |
+| `payera` · `payerb` · `payerc` | **payer keys** — short slugs used consistently in FHIR service names, APIM route paths, entitlement lookups and resource id prefixes | everywhere |
+| `group-ct3456`, `group-ct7788`, `group-ct9001` | the `Group` resources that scope every `$export` | `scripts/generate-samples.ps1` |
+| `*.example.org` | member identifier systems | generated `Patient` / `Coverage` |
+| `https://providence.org/fhir/contract` | the contract tag system URI — illustrative namespace, not a live endpoint | `meta.tag`, APIM policies |
+
+Contoso, Fabrikam and Northwind are Microsoft's standard fictional company names, used in
+documentation and samples precisely so that no real organisation is implied.
+
+**The clinical data is machine-generated.** `Patient`, `Coverage` and `ExplanationOfBenefit`
+resources are produced by [`scripts/generate-samples.ps1`](scripts/generate-samples.ps1) from a
+fixed random seed, so every run is byte-identical and reproducible. No record bears any relation to
+a real member, claim or encounter.
+
+**Resource ids are namespaced `{payer}-{contract}-`** — for example
+`payera-ct3456-pat-00001`. This is not cosmetic. `$import` preserves the `id` in the NDJSON
+verbatim, so two payers both sending `Patient/12345` would silently overwrite each other. The
+namespacing convention in the samples is the pattern production should follow.
+
+**What is *not* fictional:** the Providence organisation name, the Azure resource names in
+[docs/00-poc-environment.md](docs/00-poc-environment.md), and the two subscription GUIDs referenced
+in the troubleshooting write-ups. Those are real, but the demo environment is deleted and
+redeployed between sessions — treat them as illustrative rather than as running endpoints.
+
 **Start here:** [00-EXECUTIVE-BRIEF.md](00-EXECUTIVE-BRIEF.md)
 
 | If you want to | Read |
