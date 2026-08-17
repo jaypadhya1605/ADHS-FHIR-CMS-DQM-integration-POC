@@ -77,8 +77,291 @@ system-level and patient-level export return `403`. Adding a payer is one entry 
 plus one script call; nothing is provisioned by hand, because at forty instances configuration
 drift is the failure mode to design against.
 
+### The architecture in one picture
+
+```mermaid
+flowchart TB
+
+    subgraph SRC["1 · Payer source systems"]
+        direction LR
+        PA["Contoso Health Plan<br/>FHIR endpoint"]
+        PB["Fabrikam Medicare Advantage<br/>FHIR endpoint"]
+    end
+
+    subgraph GWIN["2 · API Management — inbound API"]
+        IN["/payera/inbound · /payerb/inbound<br/>─────────────<br/>validate-jwt<br/>ingest-principals allow-list<br/>stamps meta.tag = contract<br/>$export DENIED"]
+    end
+
+    subgraph PIPE["3 · Validate and segregate"]
+        direction LR
+        V["$validate<br/>US Core · Da Vinci PDex · ATR"]
+        S{"OperationOutcome<br/>clean?"}
+    end
+
+    subgraph STG["4 · Storage — integration data store<br/>allowSharedKeyAccess = false"]
+        direction LR
+        C1[("pdex/<br/>validated NDJSON")]
+        C3[("quarantine/<br/>rejects + OperationOutcome")]
+        C2[("export/<br/>$export output")]
+    end
+
+    subgraph AHDS["5 · AHDS workspace — PHYSICAL boundary between payers"]
+        direction LR
+        FA["fhir-payera<br/>─────────────<br/>CT-3456 · CT-7788<br/>logical split by meta.tag"]
+        FB["fhir-payerb<br/>─────────────<br/>CT-9001<br/>logical split by meta.tag"]
+    end
+
+    subgraph GWOUT["6 · API Management — outbound API"]
+        OUT["/payera/outbound · /payerb/outbound<br/>─────────────<br/>SMART Backend Services JWT<br/>payer-entitlements lookup<br/>Group/id/$export ONLY<br/>_tag forced to caller's contracts<br/>1 export per payer per 5 min<br/>all writes DENIED"]
+    end
+
+    subgraph CON["7 · Payer consumers"]
+        direction LR
+        CA["Contoso client<br/>sees CT-3456 + CT-7788"]
+        CB["Fabrikam client<br/>sees CT-9001 only"]
+    end
+
+    ENTRA["Microsoft Entra ID<br/>─────────────<br/>one app registration per payer<br/>NO Azure RBAC on any FHIR service"]
+    OBS["Log Analytics + App Insights<br/>─────────────<br/>AHDS audit · APIM gateway · StorageBlobLogs"]
+
+    PA --> IN
+    PB --> IN
+    IN --> V
+    V --> S
+    S -->|"clean"| C1
+    S -->|"rejected"| C3
+    C1 -->|"$import — read as the FHIR service's<br/>OWN system-assigned identity"| FA
+    C1 -->|"$import"| FB
+    FA -->|"Group/id/$export"| OUT
+    FB -->|"Group/id/$export"| OUT
+    FA -.->|"NDJSON"| C2
+    FB -.->|"NDJSON"| C2
+    OUT --> CA
+    OUT --> CB
+
+    ENTRA -.->|"token validated here"| IN
+    ENTRA -.->|"token validated here"| OUT
+    AHDS -.-> OBS
+    GWOUT -.-> OBS
+
+    classDef gateway fill:#0078D4,stroke:#004578,color:#ffffff
+    classDef fhir fill:#742774,stroke:#3B143B,color:#ffffff
+    classDef store fill:#107C10,stroke:#0B520B,color:#ffffff
+    classDef ext fill:#F3F2F1,stroke:#8A8886,color:#323130
+    classDef gate fill:#FFF4CE,stroke:#D29200,color:#605E5C
+    classDef ident fill:#5C2D91,stroke:#3B1D5E,color:#ffffff
+    classDef obs fill:#605E5C,stroke:#3B3A39,color:#ffffff
+
+    class IN,OUT gateway
+    class FA,FB fhir
+    class C1,C2,C3 store
+    class PA,PB,CA,CB ext
+    class V,S gate
+    class ENTRA ident
+    class OBS obs
+```
+
+| Colour | Meaning |
+|---|---|
+| 🟦 Blue | API Management — the enforcement points. Every rule that can be violated is enforced here. |
+| 🟪 Purple | AHDS FHIR services — one per payer. The physical boundary. |
+| 🟩 Green | Blob storage — the integration data store. Staging only; not a system of record. |
+| 🟨 Amber | Validation and routing — the decision that determines whether data is ever persisted. |
+| 🟫 Violet | Microsoft Entra ID — issues payer tokens but grants **no** data-plane authorisation. |
+| ⬜ Grey | Systems outside the trust boundary — payer sources and payer consumers. |
+
+Solid arrows are the data path. Dotted arrows are control and telemetry.
+The editable source diagram — four pages, more detail — is
+[diagrams/providence-ahds-reference-architecture.drawio](diagrams/providence-ahds-reference-architecture.drawio).
+
+---
+
+### Walking the diagram, block by block
+
+#### 1 · Payer source systems — outside the trust boundary
+
+Thirty to forty payers, ~150–200 contracts between them. They are *untrusted inputs*: nothing they
+send is assumed to be conformant, correctly tagged, or free of id collisions. Two payers sending
+`Patient/12345` is not a hypothetical — FHIR ids are payer-scoped by convention and global in
+practice, so ids are namespaced by payer and contract before anything reaches a FHIR service.
+
+#### 2 · API Management, inbound — where provenance is established
+
+[`apim/policies/payer-inbound.xml`](apim/policies/payer-inbound.xml)
+
+The ingest pipeline writes through this API, never directly to the FHIR service. Four things happen
+here that cannot be undone later:
+
+- **`validate-jwt`** against Entra, checked against the `ingest-principals` named value. Only
+  Providence's own ingest identities pass; a payer credential presented here fails.
+- **`meta.tag` is stamped server-side** from the `X-Providence-Contract` header. The payer does not
+  get to assert its own contract tag — if it did, the entire logical isolation model would rest on
+  the honesty of the party it is meant to constrain.
+- **Writes require the contract header.** No header, no write.
+- **`$export` is denied outright.** The inbound API is a write path; read operations belong on the
+  outbound API with a different credential and a different policy stack.
+
+`subscriptionRequired: false`. Authentication is the JWT, not an APIM subscription key — a second
+credential type would be a second thing to rotate and revoke without adding a control.
+
+#### 3 · Validate and segregate — the gate before persistence
+
+`$validate` runs each resource against US Core, Da Vinci PDex and the ATR profiles. The
+`OperationOutcome` decides the route: clean resources go to `pdex/`, rejects go to `quarantine/`
+**with the OperationOutcome alongside them**, so a payer can be told exactly which field failed
+which invariant rather than "your file was rejected".
+
+This ordering matters. Validating *after* import means invalid data is already in the FHIR service
+and has to be deleted; validating *before* means the service only ever contains conformant
+resources. Multi-version IG validation is not supported server-side, which is why validation lives
+in the pipeline rather than in AHDS — see [Q4 in docs/03-platform-questions.md](docs/03-platform-questions.md).
+
+#### 4 · Storage — the integration data store
+
+[`infra/modules/storage.bicep`](infra/modules/storage.bicep)
+
+| Container | Contents |
+|---|---|
+| `pdex` | validated NDJSON ready for `$import` |
+| `export` | `$export` output, read by APIM on the payer's behalf |
+| `quarantine` | rejected resources plus their `OperationOutcome` |
+
+**`allowSharedKeyAccess: false`** is the single most important line in this module. It forces
+managed-identity authentication and removes the account-key workaround — which is exactly the
+workaround that would have masked the `$import` 403 described below until production, where it
+would have surfaced under deadline pressure.
+
+Storage is staging, not a system of record. `pdex/` is write-once, read-once, and a lifecycle rule
+should move it to Cool at 30 days and Archive at 90.
+
+#### 5 · AHDS workspace and FHIR services — the physical boundary
+
+[`infra/modules/ahds.bicep`](infra/modules/ahds.bicep)
+
+One workspace, one `fhir-R4` service per payer. Three settings carry the weight:
+
+| Setting | Value | Why |
+|---|---|---|
+| `identity.type` | `SystemAssigned` | This is the identity `$import` actually uses to read blobs. Set it explicitly — an implicitly-created principal is how the dev environment reached a state nobody could explain. |
+| `resourceVersionPolicy` | `versioned` | Gives resource history through `_history` — the closest available answer to the transaction-log question. |
+| `importConfiguration.enabled` | `true` | With `initialImportMode: false`. Initial mode is faster but makes the service read-only for the duration of the job. |
+
+**Why the hard boundary is at the payer and not the contract.** Physical separation limits the blast
+radius of a *mistake*; logical separation limits the result set of a *query*. They are not
+substitutes. A defect in an APIM policy could expose `CT-3456` to a caller entitled only to
+`CT-7788` — both Contoso's own data, a contained incident. The same defect **cannot** expose
+Contoso's data to Fabrikam, because Fabrikam's credential has no authorisation path to
+`fhir-payera` at all. Put the unrecoverable boundary where the PHI-sharing agreement sits. That is
+what makes ~40 instances defensible where ~200 would not be.
+
+It is also the best-performing option under burst load, because one payer's export traffic is not
+another payer's problem.
+
+#### 6 · API Management, outbound — the trusted broker
+
+[`apim/policies/payer-outbound.xml`](apim/policies/payer-outbound.xml) ·
+[docs/07-apim-control-plane.md](docs/07-apim-control-plane.md)
+
+Six policy layers, in this order, and the order is the design:
+
+| # | Layer | What it prevents |
+|---|---|---|
+| 1 | `validate-jwt` | anonymous or forged callers |
+| 2 | Entitlement lookup (`payer-entitlements`) | a valid payer reaching another payer's route |
+| 3 | Route allow-list | `GET` only; every write verb returns `403` |
+| 4 | Group-scope enforcement | system-level and patient-level `$export`; the working set is bounded by cohort size, not by the 800,000-patient population |
+| 5 | **Forced `_tag`** | a caller widening its own query — the `_tag` filter is *overwritten*, not merged, so a supplied `_tag` cannot broaden the result set |
+| 6 | Rate limit | one export job per payer per five minutes; a synchronised burst becomes a queue instead of a retry storm |
+
+Then the part that makes the whole model hold:
+
+> **The payer's token is validated and then discarded.** APIM calls AHDS with its *own* managed
+> identity. The FHIR service never makes a payer-specific authorisation decision, and the payer's
+> credential never reaches it.
+
+#### 7 · Payer consumers — and why the gateway cannot be bypassed
+
+Each payer has one Entra app registration and **zero Azure RBAC role assignments on any FHIR
+service**. [`infra/modules/rbac.bicep`](infra/modules/rbac.bicep):
+
+| Principal | Role | Scope |
+|---|---|---|
+| Each FHIR service's **system-assigned** identity | Storage Blob Data Contributor | storage account |
+| APIM's system-assigned identity | FHIR Data Contributor | each FHIR service |
+| APIM's system-assigned identity | Storage Blob Data Reader | storage account |
+| Operator | FHIR Data Contributor + Storage Blob Data Contributor | both |
+| **Payer applications** | **nothing** | — |
+
+The last row *is* the security model. A payer that discovers the FHIR service URL and calls it
+directly with a valid Entra token gets `403` from Azure RBAC before any policy runs. The gateway is
+not a convention or a firewall rule — it is the only route that exists. This is what
+`run-isolation-tests.ps1` proves, and it is asserted from the payer's own credential rather than
+from an operator token.
+
+#### Observability — cross-cutting
+
+[`infra/modules/monitoring.bicep`](infra/modules/monitoring.bicep)
+
+AHDS audit logs, APIM gateway logs, `StorageBlobLogs` and Application Insights all land in one Log
+Analytics workspace. `StorageBlobLogs` earns its place specifically because it is what distinguishes
+a *live* 403 from a *replayed* one — see the `$import` section below. FHIR services accept only the
+`allLogs` category group; `audit` is rejected with `BadRequest`, which is worth knowing before a
+deployment fails on it.
+
+---
+
+### The outbound request, end to end
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Payer client
+    participant E as Microsoft Entra ID
+    participant A as APIM /payera/outbound
+    participant F as fhir-payera
+    participant S as Storage export/
+
+    P->>E: client_credentials<br/>(secret in POC, client assertion in production)
+    E-->>P: access token, aud = FHIR service URL
+    P->>A: GET Group/{id}/$export + Bearer token
+    Note over A: validate-jwt · entitlement lookup<br/>route allow-list · Group ownership<br/>_tag forced to caller's contracts<br/>rate limit 1 per 5 min
+    A-->>P: 429 + Retry-After if a job is already running
+    Note over A: payer token DISCARDED here
+    A->>F: same request, APIM's managed identity
+    F-->>A: 202 + Content-Location (job id)
+    A-->>P: 202 + Content-Location
+    F->>S: writes NDJSON to export/
+    P->>A: poll Content-Location
+    A->>F: poll
+    F-->>A: 200 + file list
+    A-->>P: 200 + file list
+```
+
+### The inbound request, end to end
+
+```
+payer source → APIM /{payer}/inbound → $validate → clean?
+                                          ├── yes → pdex/  → $import → AHDS FHIR
+                                          └── no  → quarantine/ + OperationOutcome
+```
+
+Two properties of `$import` that have caught people out, both of which shape the pipeline above:
+
+- **`$import` does not run APIM policies.** It reads NDJSON straight from blob storage. `meta.tag`
+  must already be in the file — which is why it is stamped at step 2, not at import time.
+- **`$import` preserves resource ids verbatim.** Two payers sending `Patient/12345` overwrite each
+  other silently, with no error. Namespace ids by payer and contract before import.
+
+And the identity property that cost this engagement two days:
+
+- **`$import` reads blobs as the FHIR service's *own* system-assigned principal** — not as any
+  user-assigned managed identity attached to the service. Full write-up below.
+
+---
+
 Full walkthrough: [docs/01-architecture.md](docs/01-architecture.md).
 Decision record: [docs/02-architecture-decisions.md](docs/02-architecture-decisions.md).
+Policy stack in detail: [docs/07-apim-control-plane.md](docs/07-apim-control-plane.md).
 
 ---
 
