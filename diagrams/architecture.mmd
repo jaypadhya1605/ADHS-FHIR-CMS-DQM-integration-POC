@@ -1,0 +1,71 @@
+%% Providence CMS-0057-F on Azure Health Data Services
+%% Option 1: physical separation per payer, logical separation per contract.
+%% Editable source of truth is providence-ahds-reference-architecture.drawio;
+%% this rendering exists for embedding in markdown.
+
+flowchart LR
+    subgraph SRC["Payer source systems"]
+        PA["Contoso Health Plan<br/>FHIR endpoint"]
+        PB["Fabrikam Medicare Advantage<br/>FHIR endpoint"]
+    end
+
+    subgraph GWIN["APIM — inbound"]
+        IN["/payera/inbound<br/>/payerb/inbound<br/><br/>JWT validate<br/>ingest allow-list<br/>stamps meta.tag = contract<br/>$export DENIED"]
+    end
+
+    subgraph PIPE["Validate &amp; segregate"]
+        V["$validate<br/>US Core · PDex · ATR"]
+        S["route on OperationOutcome"]
+    end
+
+    subgraph STG["Storage — integration data store<br/>allowSharedKeyAccess = false"]
+        C1[("pdex/<br/>clean NDJSON")]
+        C2[("export/<br/>$export output")]
+        C3[("quarantine/<br/>rejects + OperationOutcome")]
+    end
+
+    subgraph AHDS["AHDS workspace — physical boundary"]
+        FA["fhir-payera<br/>CT-3456 · CT-7788<br/><i>logical, meta.tag</i>"]
+        FB["fhir-payerb<br/>CT-9001<br/><i>logical, meta.tag</i>"]
+    end
+
+    subgraph GWOUT["APIM — outbound"]
+        OUT["/payera/outbound<br/>/payerb/outbound<br/><br/>SMART Backend Services JWT<br/>entitlement lookup<br/>Group/{id}/$export ONLY<br/>_tag forced to caller's contracts<br/>1 concurrent export / payer<br/>writes DENIED"]
+    end
+
+    subgraph CON["Payer consumers"]
+        CA["Contoso client<br/>sees CT-3456 + CT-7788"]
+        CB["Fabrikam client<br/>sees CT-9001"]
+    end
+
+    PA --> IN
+    PB --> IN
+    IN --> V --> S
+    S -->|clean| C1
+    S -->|rejected| C3
+    C1 -->|"$import<br/>as the FHIR service's<br/>SYSTEM-ASSIGNED identity"| FA
+    C1 -->|"$import"| FB
+    FA -->|"Group/{id}/$export"| OUT
+    FB -->|"Group/{id}/$export"| OUT
+    FA -.-> C2
+    FB -.-> C2
+    OUT --> CA
+    OUT --> CB
+
+    ENTRA["Microsoft Entra ID<br/>one app registration per payer<br/>NO Azure RBAC role granted —<br/>this is why the gateway cannot be bypassed"]
+    OBS["Log Analytics + App Insights<br/>AHDS audit · APIM gateway · StorageBlobLogs"]
+
+    ENTRA -.-> IN
+    ENTRA -.-> OUT
+    AHDS -.-> OBS
+    GWOUT -.-> OBS
+
+    classDef azure fill:#0078D4,stroke:none,color:#fff
+    classDef fhir fill:#742774,stroke:none,color:#fff
+    classDef ext fill:#F3F2F1,stroke:#8A8886,color:#323130
+    classDef warn fill:#FFF4CE,stroke:#D29200,color:#605E5C
+
+    class IN,OUT,ENTRA,OBS azure
+    class FA,FB fhir
+    class PA,PB,CA,CB ext
+    class V,S warn

@@ -1,0 +1,188 @@
+<!--
+=============================================================================
+ INBOUND (ingest) policy  -  __PAYER_KEY__
+=============================================================================
+ Same FHIR service as the outbound endpoint. Different APIM API, different
+ allow-list, different credential.
+
+ This is the direct answer to Platform Engineering's question on 2026-08-12:
+   "for inbound and outbound data, can it be isolated from each other within
+    one service? ... we don't want payer to query our inbound data."
+
+ Yes. The isolation is not a property of the FHIR service - it is a property of
+ the route. A credential entitled to this endpoint can write and import but
+ cannot export. A credential entitled to the outbound endpoint can export but
+ cannot write. Neither credential can reach the other endpoint, because the
+ entitlement record names the route.
+=============================================================================
+-->
+<policies>
+    <inbound>
+        <base />
+
+        <validate-jwt header-name="Authorization"
+                      failed-validation-httpcode="401"
+                      failed-validation-error-message="Unauthorized. An ingest access token is required."
+                      output-token-variable-name="jwt"
+                      require-expiration-time="true"
+                      require-signed-tokens="true">
+            <openid-config url="https://login.microsoftonline.com/__TENANT_ID__/v2.0/.well-known/openid-configuration" />
+            <audiences>
+                <audience>__FHIR_AUDIENCE__</audience>
+            </audiences>
+            <issuers>
+                <issuer>https://sts.windows.net/__TENANT_ID__/</issuer>
+                <issuer>https://login.microsoftonline.com/__TENANT_ID__/v2.0</issuer>
+            </issuers>
+        </validate-jwt>
+
+        <set-variable name="callerAppId" value="@{
+            var jwt = (Jwt)context.Variables["jwt"];
+            string[] v;
+            if (jwt.Claims.TryGetValue("azp", out v) &amp;&amp; v.Length &gt; 0) { return v[0]; }
+            if (jwt.Claims.TryGetValue("appid", out v) &amp;&amp; v.Length &gt; 0) { return v[0]; }
+            return "";
+        }" />
+
+        <!-- Ingest is a much smaller club than export: only principals listed in
+             the ingest allow-list may write to this payer's instance. -->
+        <choose>
+            <when condition="@{
+                var raw = "{{ingest-principals}}".Replace((char)39, (char)34);
+                var allowed = JArray.Parse(raw).Select(x =&gt; x.ToString());
+                return !allowed.Contains((string)context.Variables["callerAppId"]);
+            }">
+                <return-response>
+                    <set-status code="403" reason="Forbidden" />
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/fhir+json</value>
+                    </set-header>
+                    <set-body>@{
+                        return new JObject(
+                            new JProperty("resourceType", "OperationOutcome"),
+                            new JProperty("issue", new JArray(new JObject(
+                                new JProperty("severity", "error"),
+                                new JProperty("code", "forbidden"),
+                                new JProperty("diagnostics", "Application " + (string)context.Variables["callerAppId"] + " is not authorised for inbound ingest. Payer-facing credentials cannot write.")
+                            )))
+                        ).ToString();
+                    }</set-body>
+                </return-response>
+            </when>
+        </choose>
+
+        <!-- =================================================================
+             ROUTE ALLOW-LIST - the mirror image of the outbound policy.
+             $export is explicitly denied here so that a compromised ingest
+             credential cannot be turned into a bulk data exfiltration tool.
+             ================================================================= -->
+        <choose>
+            <when condition="@(context.Request.Url.Path.ToLower().Contains("/$export") || context.Request.Url.Path.ToLower().Contains("/_operations/export"))">
+                <return-response>
+                    <set-status code="403" reason="Forbidden" />
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/fhir+json</value>
+                    </set-header>
+                    <set-body>@{
+                        return new JObject(
+                            new JProperty("resourceType", "OperationOutcome"),
+                            new JProperty("issue", new JArray(new JObject(
+                                new JProperty("severity", "error"),
+                                new JProperty("code", "forbidden"),
+                                new JProperty("diagnostics", "$export is not available on the inbound ingest endpoint. Inbound and outbound are separately authorised routes over the same FHIR service.")
+                            )))
+                        ).ToString();
+                    }</set-body>
+                </return-response>
+            </when>
+        </choose>
+
+        <!-- =================================================================
+             MANDATORY CONTRACT STAMPING
+             Every resource written through this endpoint is tagged with the
+             contract it arrived under. This is what makes the outbound _tag
+             filter meaningful - if ingest does not stamp, export cannot filter.
+
+             Providence must set X-Providence-Contract on every write. Refusing
+             untagged writes is deliberate: silently untagged data is invisible
+             to every payer and effectively lost.
+             ================================================================= -->
+        <choose>
+            <when condition="@(context.Request.Method == "POST" || context.Request.Method == "PUT")">
+                <choose>
+                    <when condition="@(!context.Request.Headers.ContainsKey("X-Providence-Contract"))">
+                        <return-response>
+                            <set-status code="400" reason="Bad Request" />
+                            <set-header name="Content-Type" exists-action="override">
+                                <value>application/fhir+json</value>
+                            </set-header>
+                            <set-body>@{
+                                return new JObject(
+                                    new JProperty("resourceType", "OperationOutcome"),
+                                    new JProperty("issue", new JArray(new JObject(
+                                        new JProperty("severity", "error"),
+                                        new JProperty("code", "required"),
+                                        new JProperty("diagnostics", "Header X-Providence-Contract is required on all writes so the resource can be tagged for contract-level isolation.")
+                                    )))
+                                ).ToString();
+                            }</set-body>
+                        </return-response>
+                    </when>
+                </choose>
+                <set-body>@{
+                    var body = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
+                    var contract = context.Request.Headers.GetValueOrDefault("X-Providence-Contract", "");
+                    var meta = body["meta"] as JObject;
+                    if (meta == null) { meta = new JObject(); body["meta"] = meta; }
+                    var tags = meta["tag"] as JArray;
+                    if (tags == null) { tags = new JArray(); meta["tag"] = tags; }
+                    var already = tags.Any(t =&gt; t["system"] != null &amp;&amp; t["system"].ToString() == "https://providence.org/fhir/contract");
+                    if (!already) {
+                        tags.Add(new JObject(
+                            new JProperty("system", "https://providence.org/fhir/contract"),
+                            new JProperty("code", contract)
+                        ));
+                    }
+                    return body.ToString();
+                }</set-body>
+            </when>
+        </choose>
+
+        <!-- Ingest bursts are bulk by nature; a higher ceiling than the payer path. -->
+        <rate-limit-by-key calls="3000"
+                           renewal-period="60"
+                           counter-key="@((string)context.Variables["callerAppId"])" />
+
+        <authentication-managed-identity resource="__FHIR_AUDIENCE__" output-token-variable-name="msi" ignore-error="false" />
+        <set-header name="Authorization" exists-action="override">
+            <value>@("Bearer " + (string)context.Variables["msi"])</value>
+        </set-header>
+    </inbound>
+
+    <backend>
+        <base />
+    </backend>
+
+    <outbound>
+        <base />
+        <set-header name="X-Powered-By" exists-action="delete" />
+    </outbound>
+
+    <on-error>
+        <base />
+        <set-header name="Content-Type" exists-action="override">
+            <value>application/fhir+json</value>
+        </set-header>
+        <set-body>@{
+            return new JObject(
+                new JProperty("resourceType", "OperationOutcome"),
+                new JProperty("issue", new JArray(new JObject(
+                    new JProperty("severity", "error"),
+                    new JProperty("code", "exception"),
+                    new JProperty("diagnostics", context.LastError?.Message ?? "Gateway error"),
+                    new JProperty("details", new JObject(new JProperty("text", "correlationId=" + context.RequestId)))
+                )))
+            ).ToString();
+        }</set-body>
+    </on-error>
+</policies>

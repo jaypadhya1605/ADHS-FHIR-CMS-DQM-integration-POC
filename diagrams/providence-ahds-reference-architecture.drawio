@@ -1,0 +1,541 @@
+<mxfile host="app.diagrams.net" agent="Microsoft HLS - Providence CMS DQM POC" version="24.7.17" type="device">
+  <diagram id="opt1-ref" name="1 - Option 1 Reference Architecture (AGREED)">
+    <mxGraphModel dx="1600" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Providence CMS-0057-F — AHDS FHIR Reference Architecture&#10;Option 1: one FHIR service per PAYER (physical) · contracts inside a payer are LOGICAL (meta.tag + _tag at APIM)" style="text;html=1;align=left;verticalAlign=middle;fontSize=16;fontStyle=1;fontColor=#243A5E;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="agreed" value="AGREED 2026-08-12&#10;Enterprise Architecture + Microsoft HLS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontColor=#0B6413;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1420" y="24" width="230" height="44" as="geometry" />
+        </mxCell>
+
+        <!-- ================= column headers ================= -->
+        <mxCell id="h1" value="PAYER SOURCE" style="text;html=1;align=center;fontSize=10;fontStyle=1;fontColor=#605E5C;" vertex="1" parent="1">
+          <mxGeometry x="40" y="100" width="160" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="h2" value="GATEWAY (INBOUND)" style="text;html=1;align=center;fontSize=10;fontStyle=1;fontColor=#605E5C;" vertex="1" parent="1">
+          <mxGeometry x="240" y="100" width="170" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="h3" value="VALIDATE + SEGREGATE" style="text;html=1;align=center;fontSize=10;fontStyle=1;fontColor=#605E5C;" vertex="1" parent="1">
+          <mxGeometry x="450" y="100" width="180" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="h4" value="INTEGRATION DATA STORE" style="text;html=1;align=center;fontSize=10;fontStyle=1;fontColor=#605E5C;" vertex="1" parent="1">
+          <mxGeometry x="670" y="100" width="180" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="h5" value="AHDS FHIR (PHYSICAL BOUNDARY)" style="text;html=1;align=center;fontSize=10;fontStyle=1;fontColor=#605E5C;" vertex="1" parent="1">
+          <mxGeometry x="880" y="100" width="270" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="h6" value="GATEWAY (OUTBOUND)" style="text;html=1;align=center;fontSize=10;fontStyle=1;fontColor=#605E5C;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="100" width="170" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="h7" value="PAYER CONSUMER" style="text;html=1;align=center;fontSize=10;fontStyle=1;fontColor=#605E5C;" vertex="1" parent="1">
+          <mxGeometry x="1400" y="100" width="160" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- ================= payer sources ================= -->
+        <mxCell id="srcA" value="Contoso Health Plan&#10;FHIR endpoint&#10;(PDex / ATR / CARIN)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="180" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="srcB" value="Fabrikam Medicare Adv.&#10;FHIR endpoint&#10;(PDex / ATR / CARIN)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="420" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ================= APIM inbound ================= -->
+        <mxCell id="apimIn" value="Azure API Management&#10;INBOUND ROUTES&#10;&#10;/payera/inbound&#10;/payerb/inbound&#10;&#10;• JWT validate&#10;• ingest allow-list&#10;• stamps meta.tag&#10;  = contract&#10;• $export DENIED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="240" y="150" width="170" height="400" as="geometry" />
+        </mxCell>
+
+        <!-- ================= validate / segregate ================= -->
+        <mxCell id="val" value="$validate&#10;US Core · Da Vinci PDex · ATR&#10;(batch 50–100 entries, &lt;28 MB)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#50E6FF;strokeColor=none;fontColor=#003966;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="450" y="200" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="seg" value="Segregate on OperationOutcome&#10;clean → pdex&#10;unclean → quarantine" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#50E6FF;strokeColor=none;fontColor=#003966;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="450" y="320" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ns" value="Namespace resource IDs by payer&#10;$import preserves IDs verbatim —&#10;collisions overwrite silently" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#D29200;fontColor=#605E5C;fontSize=9;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="450" y="430" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ================= storage ================= -->
+        <mxCell id="stg" value="Storage account&#10;(integration data store)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="670" y="170" width="180" height="330" as="geometry" />
+        </mxCell>
+        <mxCell id="c1" value="pdex/&#10;clean NDJSON" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0078D4;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="690" y="215" width="140" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="c2" value="export/&#10;$export output" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0078D4;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="690" y="280" width="140" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="c3" value="quarantine/&#10;failed + OperationOutcome" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0078D4;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="690" y="345" width="140" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="nokey" value="allowSharedKeyAccess = false&#10;managed identity only" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FDE7E9;strokeColor=#A80000;fontColor=#A80000;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="690" y="410" width="140" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ================= AHDS ================= -->
+        <mxCell id="ws" value="AHDS workspace" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#243A5E;dashed=1;fontSize=10;verticalAlign=top;spacingTop=6;fontColor=#243A5E;" vertex="1" parent="1">
+          <mxGeometry x="880" y="140" width="270" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="fhirA" value="fhir-payera&#10;Contoso Health Plan&#10;&#10;CT-3456 · CT-7788&#10;(logical, meta.tag)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="905" y="185" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fhirB" value="fhir-payerb&#10;Fabrikam Medicare Adv.&#10;&#10;CT-9001&#10;(logical, meta.tag)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="905" y="345" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="scale" value="~40 instances at Providence scale&#10;(default quota is 10 — raise by support ticket)" style="text;html=1;align=center;fontSize=9;fontColor=#A80000;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="880" y="490" width="270" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ================= APIM outbound ================= -->
+        <mxCell id="apimOut" value="Azure API Management&#10;OUTBOUND ROUTES&#10;&#10;/payera/outbound&#10;/payerb/outbound&#10;&#10;• SMART Backend Svc&#10;  JWT validate&#10;• entitlement lookup&#10;• Group/{id}/$export&#10;  ONLY&#10;• _tag forced to the&#10;  caller's contracts&#10;• 1 concurrent export&#10;  per payer&#10;• writes DENIED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="150" width="170" height="400" as="geometry" />
+        </mxCell>
+
+        <!-- ================= consumers ================= -->
+        <mxCell id="conA" value="Contoso consumer&#10;SMART Backend Services client&#10;sees CT-3456 + CT-7788 only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1400" y="190" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="conB" value="Fabrikam consumer&#10;SMART Backend Services client&#10;sees CT-9001 only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1400" y="400" width="180" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- ================= cross-cutting ================= -->
+        <mxCell id="xband" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAF9F8;strokeColor=#C8C6C4;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="620" width="1540" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="xlabel" value="CROSS-CUTTING" style="text;html=1;align=left;fontSize=10;fontStyle=1;fontColor=#605E5C;" vertex="1" parent="1">
+          <mxGeometry x="55" y="626" width="200" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="entra" value="Microsoft Entra ID&#10;one app registration per payer&#10;client_credentials + client assertion" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="70" y="655" width="220" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="kv" value="Key Vault&#10;payer credentials&#10;no key material on disk" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="320" y="655" width="200" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="mi" value="Managed identity&#10;FHIR system-assigned → Storage Blob Data Contributor&#10;APIM system-assigned → FHIR Data Contributor" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#107C10;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="550" y="655" width="330" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="obs" value="Log Analytics + Application Insights&#10;AHDS audit logs · APIM gateway logs · StorageBlobLogs&#10;p95 TotalLatency · 429 rate · import/export job state" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="910" y="655" width="330" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="net" value="Private endpoints + VNet&#10;(production posture; POC runs public)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAF9F8;strokeColor=#8A8886;fontColor=#605E5C;fontSize=9;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="655" width="290" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- ================= callouts ================= -->
+        <mxCell id="note403" value="$import authenticates as the FHIR service's OWN system-assigned identity — NOT the user-assigned identity you attach.&#10;Granting the UAMI alone produces HTTP 403 on GetBlobProperties. This is the 2026-08-13 dev failure. See infra/modules/rbac.bicep." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE7E9;strokeColor=#A80000;fontColor=#A80000;fontSize=9;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="600" y="770" width="520" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="noteApim" value="&quot;The physical separation should be as coarse as we can get it. And then the contracts and all this stuff should be handled by APIM.&quot;&#10;— Microsoft HLS, 2026-08-12" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FC;strokeColor=#0078D4;fontColor=#243A5E;fontSize=9;align=left;spacingLeft=8;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="770" width="530" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="noteBypass" value="A payer CANNOT bypass the gateway: the payer's Entra app holds no Azure RBAC role on the FHIR service, so a token presented&#10;directly to AHDS is authenticated but not authorised. Only APIM's managed identity carries the FHIR data role." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontColor=#0B6413;fontSize=9;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="770" width="430" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ================= edges ================= -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;endArrow=block;" edge="1" parent="1" source="srcA" target="apimIn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;endArrow=block;" edge="1" parent="1" source="srcB" target="apimIn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="mTLS / JWT" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;endArrow=block;fontSize=9;" edge="1" parent="1" source="apimIn" target="val">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;endArrow=block;" edge="1" parent="1" source="val" target="seg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;endArrow=block;" edge="1" parent="1" source="seg" target="stg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="$import" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#A80000;strokeWidth=2;endArrow=block;fontSize=9;fontColor=#A80000;fontStyle=1;" edge="1" parent="1" source="c1" target="fhirA">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="$import" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#A80000;strokeWidth=2;endArrow=block;fontSize=9;fontColor=#A80000;fontStyle=1;" edge="1" parent="1" source="c1" target="fhirB">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="Group/{id}/$export" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#742774;strokeWidth=2;endArrow=block;fontSize=9;fontColor=#742774;" edge="1" parent="1" source="fhirA" target="apimOut">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="Group/{id}/$export" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#742774;strokeWidth=2;endArrow=block;fontSize=9;fontColor=#742774;" edge="1" parent="1" source="fhirB" target="apimOut">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;endArrow=block;" edge="1" parent="1" source="apimOut" target="conA">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;endArrow=block;" edge="1" parent="1" source="apimOut" target="conB">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="four-options" name="2 - The Four Options (the architecture lead's canvas, completed)">
+    <mxGraphModel dx="1600" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="t2" value="The four options drawn on screen, 2026-08-12 — with the decision recorded" style="text;html=1;align=left;fontSize=16;fontStyle=1;fontColor=#243A5E;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="900" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="leg" value="Legend:  Con1 | Con2 = contracts    ·    Inbound | Outbound    ·    arrow = API Management" style="text;html=1;align=left;fontSize=10;fontColor=#605E5C;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="52" width="900" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- ============ OPTION 1 ============ -->
+        <mxCell id="o1box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;strokeWidth=3;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="790" height="440" as="geometry" />
+        </mxCell>
+        <mxCell id="o1t" value="OPTION 1 — one combined FHIR service per payer, contracts logical, APIM in front" style="text;html=1;align=left;fontSize=12;fontStyle=1;fontColor=#0B6413;" vertex="1" parent="1">
+          <mxGeometry x="60" y="100" width="700" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="o1sel" value="SELECTED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#107C10;strokeColor=none;fontColor=#FFFFFF;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="740" y="98" width="80" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="o1p" value="On-canvas annotation:&#10;Pros — Better Performance, Secure&#10;Cons — Complex setup, both Physical and Logical Separation" style="text;html=1;align=left;fontSize=9;fontColor=#605E5C;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="60" y="126" width="500" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="o1s1" value="Payer 1 FHIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="190" width="120" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="o1s2" value="Payer 2 FHIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="300" width="120" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="o1s3" value="Payer 3 FHIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="410" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="o1a" value="A P I&#10;M G M T" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="230" y="190" width="60" height="270" as="geometry" />
+        </mxCell>
+
+        <mxCell id="o1f1" value="AHDS FHIR — Payer 1&#10;Con1 | Con2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="340" y="185" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="o1f2" value="AHDS FHIR — Payer 2&#10;Con1 | Con2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="340" y="295" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="o1f3" value="AHDS FHIR — Payer 3&#10;Con1 | Con2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="340" y="405" width="170" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="o1a2" value="A P I&#10;M G M T" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="190" width="60" height="270" as="geometry" />
+        </mxCell>
+
+        <mxCell id="o1c1" value="Payer 1 consumer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="670" y="190" width="130" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="o1c2" value="Payer 2 consumer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="670" y="300" width="130" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="o1c3" value="Payer 3 consumer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="670" y="410" width="130" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="o1e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o1s1" target="o1a"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o1e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o1s2" target="o1a"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o1e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o1s3" target="o1a"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o1e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o1a" target="o1f1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o1e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o1a" target="o1f2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o1e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o1a" target="o1f3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o1e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o1f1" target="o1a2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o1e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o1f2" target="o1a2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o1e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o1f3" target="o1a2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o1e10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o1a2" target="o1c1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o1e11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o1a2" target="o1c2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o1e12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o1a2" target="o1c3"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ============ OPTION 3 ============ -->
+        <mxCell id="o3box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAF9F8;strokeColor=#8A8886;" vertex="1" parent="1">
+          <mxGeometry x="870" y="90" width="790" height="440" as="geometry" />
+        </mxCell>
+        <mxCell id="o3t" value="OPTION 3 — separate inbound AND outbound instance per payer" style="text;html=1;align=left;fontSize=12;fontStyle=1;fontColor=#323130;" vertex="1" parent="1">
+          <mxGeometry x="890" y="100" width="600" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="o3rej" value="REJECTED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#A80000;strokeColor=none;fontColor=#FFFFFF;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1570" y="98" width="80" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="o3p" value="On-canvas annotation: &quot;Complicated (managing overhead) and Secure, performant&quot;&#10;Microsoft HLS: &quot;the options on the right are ... more instances, more management problems&quot;&#10;Doubles the instance count to ~80 and doubles the quota problem." style="text;html=1;align=left;fontSize=9;fontColor=#605E5C;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="890" y="126" width="640" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="o3s1" value="Payer 1 FHIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="890" y="200" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o3s2" value="Payer 2 FHIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="890" y="320" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o3s3" value="Payer 3 FHIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="890" y="440" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o3i1" value="AHDS Inbound 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="200" width="120" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o3i2" value="AHDS Inbound 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="320" width="120" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o3i3" value="AHDS Inbound 3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="440" width="120" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o3v" value="Vendor" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#D29200;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1215" y="320" width="80" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o3o1" value="AHDS Outbound 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1340" y="200" width="130" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o3o2" value="AHDS Outbound 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1340" y="320" width="130" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o3o3" value="AHDS Outbound 3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1340" y="440" width="130" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o3c1" value="Consumer 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1520" y="200" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o3c2" value="Consumer 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1520" y="320" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o3c3" value="Consumer 3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1520" y="440" width="110" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o3ea" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o3s1" target="o3i1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o3eb" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o3s2" target="o3i2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o3ec" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o3s3" target="o3i3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o3ed" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#D29200;dashed=1;" edge="1" parent="1" source="o3i2" target="o3v"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o3ee" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o3o1" target="o3c1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o3ef" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o3o2" target="o3c2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o3eg" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o3o3" target="o3c3"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ============ OPTION 2 ============ -->
+        <mxCell id="o2box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAF9F8;strokeColor=#8A8886;" vertex="1" parent="1">
+          <mxGeometry x="40" y="560" width="790" height="410" as="geometry" />
+        </mxCell>
+        <mxCell id="o2t" value="OPTION 2 — all payers share one FHIR service" style="text;html=1;align=left;fontSize=12;fontStyle=1;fontColor=#323130;" vertex="1" parent="1">
+          <mxGeometry x="60" y="570" width="600" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="o2rej" value="REJECTED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#A80000;strokeColor=none;fontColor=#FFFFFF;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="740" y="568" width="80" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="o2p" value="On-canvas annotation:  Pros — Easy setup  ·  Cons — Performance and Security&#10;Enterprise Architecture: &quot;We have PHI over there. We are only allowed to share PHI with those payers who should have&#10;access to that. So the physical separation has to be at the payer level.&quot;" style="text;html=1;align=left;fontSize=9;fontColor=#605E5C;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="60" y="594" width="700" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="o2s1" value="Payer 1 FHIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="670" width="120" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o2s2" value="Payer 2 FHIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="780" width="120" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o2s3" value="Payer 3 FHIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="890" width="120" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o2f" value="ONE shared AHDS FHIR service&#10;all payers, all contracts&#10;&#10;Isolation is a tag, not a boundary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#A80000;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="290" y="720" width="220" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="o2c1" value="Payer 1 consumer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="640" y="670" width="140" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o2c2" value="Payer 2 consumer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="640" y="780" width="140" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o2c3" value="Payer 3 consumer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="640" y="890" width="140" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="o2e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o2s1" target="o2f"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o2e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o2s2" target="o2f"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o2e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o2s3" target="o2f"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o2e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o2f" target="o2c1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o2e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o2f" target="o2c2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o2e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o2f" target="o2c3"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ============ OPTION 4 ============ -->
+        <mxCell id="o4box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAF9F8;strokeColor=#8A8886;" vertex="1" parent="1">
+          <mxGeometry x="870" y="560" width="790" height="410" as="geometry" />
+        </mxCell>
+        <mxCell id="o4t" value="OPTION 4 — shared inbound, per-payer outbound" style="text;html=1;align=left;fontSize=12;fontStyle=1;fontColor=#323130;" vertex="1" parent="1">
+          <mxGeometry x="890" y="570" width="600" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="o4rej" value="REJECTED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#A80000;strokeColor=none;fontColor=#FFFFFF;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1570" y="568" width="80" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="o4p" value="No pros/cons annotation was legible on the recording for this quadrant.&#10;Rejected for the same reason as Option 2: the shared inbound instance co-mingles PHI from every payer,&#10;which is the exact condition Enterprise Architecture ruled out." style="text;html=1;align=left;fontSize=9;fontColor=#605E5C;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="890" y="594" width="700" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="o4s1" value="Payer 1 FHIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="890" y="670" width="110" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="o4s2" value="Payer 2 FHIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="890" y="780" width="110" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="o4s3" value="Payer 3 FHIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="890" y="890" width="110" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="o4in" value="ONE shared&#10;AHDS Inbound" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#A80000;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="740" width="130" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="o4o1" value="AHDS Outbound 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="670" width="130" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="o4o2" value="AHDS Outbound 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="780" width="130" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="o4o3" value="AHDS Outbound 3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="890" width="130" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="o4c1" value="Consumer 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1470" y="670" width="110" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="o4c2" value="Consumer 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1470" y="780" width="110" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="o4c3" value="Consumer 3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1470" y="890" width="110" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="o4e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o4s1" target="o4in"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o4e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o4s2" target="o4in"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o4e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o4s3" target="o4in"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o4e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o4in" target="o4o1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o4e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o4in" target="o4o2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o4e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o4in" target="o4o3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o4e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o4o1" target="o4c1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o4e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o4o2" target="o4c2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="o4e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;" edge="1" parent="1" source="o4o3" target="o4c3"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="decision" value="DECISION, 2026-08-12 — Enterprise Architecture:  &quot;separate instances for payer, will change the default from 10 to 40 ... And then within a payer, if we want to separate by different contracts, that's going to be a logical separation instead of a physical one.&quot;   Microsoft HLS: &quot;Yes.&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontColor=#0B6413;fontSize=10;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1000" width="1620" height="50" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="onboard" name="3 - Payer Onboarding (SMART Backend Services)">
+    <mxGraphModel dx="1600" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="ot" value="Payer onboarding — the seven steps&#10;Enterprise Architecture, 2026-08-12: &quot;We have a payer. We want to give that payer access to the AHDS server. What is the process for us to set that thing up for them?&quot;" style="text;html=1;align=left;fontSize=15;fontStyle=1;fontColor=#243A5E;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1300" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s1" value="1. Register an Entra application&#10;for THIS payer&#10;&#10;One app per payer. Granularity matters —&#10;this is the revocation unit." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="110" width="270" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" value="2. Issue a credential&#10;&#10;Certificate / client assertion preferred.&#10;Microsoft HLS: &quot;a secret, which I don't recommend.&quot;&#10;Private key stays in Key Vault." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="360" y="110" width="270" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="3. Create the FHIR Group&#10;for each contract&#10;&#10;Group/{id} holds the member cohort.&#10;This is the export unit." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=10;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="680" y="110" width="270" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" value="4. Tag the payer's data&#10;&#10;meta.tag = https://providence.org/fhir/contract|CT-3456&#10;Stamped automatically by the inbound APIM policy." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=10;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="110" width="290" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="s5" value="5. Add the entitlement record in APIM&#10;&#10;appId -&gt; { payer, contracts[], groups[] }&#10;NO Azure RBAC role is granted to the payer app —&#10;this is what makes bypassing the gateway impossible." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="270" width="410" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="s6" value="6. Hand the payer their connection details&#10;&#10;• token endpoint (Entra)&#10;• gateway base URL   https://&lt;apim&gt;/payera/outbound&#10;• their Group id(s)&#10;• .well-known/smart-configuration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="500" y="270" width="410" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="s7" value="7. Verify with the negative tests&#10;&#10;• Group/{theirs}/$export      -&gt; 202 Accepted&#10;• Group/{someone else's}/$export -&gt; 403&#10;• GET /Patient (open query)   -&gt; contract-filtered&#10;• POST /Patient (write)       -&gt; 403" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#107C10;strokeColor=none;fontColor=#FFFFFF;fontSize=10;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="960" y="270" width="410" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="flowT" value="Runtime flow" style="text;html=1;align=left;fontSize=13;fontStyle=1;fontColor=#243A5E;" vertex="1" parent="1">
+          <mxGeometry x="40" y="430" width="300" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f1" value="Payer client" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F2F1;strokeColor=#8A8886;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="480" width="140" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="f2" value="Microsoft Entra ID&#10;token endpoint" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="260" y="480" width="160" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="f3" value="APIM&#10;/payera/outbound" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="500" y="480" width="160" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="f4" value="AHDS FHIR&#10;fhir-payera" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="740" y="480" width="160" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="f5" value="Storage&#10;export/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="980" y="480" width="140" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fe1" value="① client_credentials&#10;   + client assertion" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;fontSize=9;" edge="1" parent="1" source="f1" target="f2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe2" value="② Bearer token&#10;   aud = FHIR url" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;fontSize=9;" edge="1" parent="1" source="f2" target="f3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe3" value="③ validate-jwt&#10;   entitlement lookup&#10;   token swap → MSI" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;fontSize=9;" edge="1" parent="1" source="f3" target="f4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe4" value="④ NDJSON" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#605E5C;fontSize=9;" edge="1" parent="1" source="f4" target="f5"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="caveat" value="CAVEAT — Microsoft HLS, 2026-08-12:  &quot;typically, it still falls short, even with 2.0 ... You're still going to have to add APIM in there.&quot;&#10;SMART scopes are coarse-grained: they narrow by RESOURCE TYPE (&quot;you can read observations ... but you can't see conditions&quot;).&#10;They cannot express &quot;only the members of contract CT-3456&quot;. That row-level rule is APIM's job, every time." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#D29200;fontColor=#605E5C;fontSize=10;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="600" width="1330" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="smartScopeNote" value="Integration Engineering, 2026-08-12:  &quot;with SMART backend, does that then mean that the access is right per resource of data on our end?&quot;  Microsoft HLS: &quot;Yes.&quot;&#10;Precisely: SMART scopes gate WHICH RESOURCE TYPES a payer may read. Which ROWS of those types is decided by the Group membership and the _tag filter applied at APIM.&#10;Both layers are needed. Neither is sufficient alone." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FC;strokeColor=#0078D4;fontColor=#243A5E;fontSize=10;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="710" width="1330" height="80" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="the403" name="4 - The $import 403 (RCA)">
+    <mxGraphModel dx="1600" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="800" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="rt" value="Why $import returned 403 — and why granting the user-assigned identity did nothing" style="text;html=1;align=left;fontSize=15;fontStyle=1;fontColor=#243A5E;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1100" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="badT" value="WHAT PROVIDENCE DEV HAD  (fails)" style="text;html=1;align=left;fontSize=12;fontStyle=1;fontColor=#A80000;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="400" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="bf" value="FHIR service&#10;dev-fhir-ahds-inbound&#10;&#10;system-assigned: OFF&#10;user-assigned: attached" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="115" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="buami" value="mi-pophealth-fhir-inbound-test-01&#10;324cb15a-…&#10;&#10;Storage Blob Data Contributor ✔" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="300" y="105" width="230" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="bsp" value="devfhirahdsworkspace/fhirservices/&#10;dev-fhir-ahds-inbound&#10;7d1e195d-…&#10;&#10;NO ROLE ✘" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE7E9;strokeColor=#A80000;fontColor=#A80000;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="300" y="180" width="230" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="bstore" value="devfhirinbound&#10;pdex container" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="600" y="140" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="b403" value="403 Forbidden&#10;&#10;&quot;Failed to get properties of blob&#10;https://devfhirinbound.blob.core.windows.net/&#10;pdex/MSSP/Group01/…/part-000001.ndjson&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#A80000;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="820" y="130" width="300" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="be1" value="what everyone assumed" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#107C10;dashed=1;fontSize=9;" edge="1" parent="1" source="bf" target="buami"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be2" value="what actually happens" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#A80000;strokeWidth=3;fontSize=9;fontColor=#A80000;fontStyle=1;" edge="1" parent="1" source="bf" target="bsp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be3" value="GetBlobProperties" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#A80000;strokeWidth=3;fontSize=9;" edge="1" parent="1" source="bsp" target="bstore"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#A80000;strokeWidth=3;" edge="1" parent="1" source="bstore" target="b403"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="goodT" value="WHAT v4 DEPLOYS  (works)" style="text;html=1;align=left;fontSize=12;fontStyle=1;fontColor=#107C10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="320" width="400" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="gf" value="FHIR service&#10;fhir-payera&#10;&#10;system-assigned: ON" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#742774;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="355" width="200" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="gsp" value="system-assigned principal&#10;&#10;Storage Blob Data Contributor ✔&#10;granted in infra/modules/rbac.bicep" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DFF6DD;strokeColor=#107C10;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="300" y="360" width="230" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="gstore" value="storage account&#10;pdex container&#10;allowSharedKeyAccess=false" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=none;fontColor=#FFFFFF;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="600" y="360" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="g202" value="202 Accepted&#10;&#10;Content-Location: …/_operations/import/{id}&#10;→ 200 OK  transactionTime, output[], error[]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#107C10;strokeColor=none;fontColor=#FFFFFF;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="820" y="360" width="300" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ge1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#107C10;strokeWidth=3;" edge="1" parent="1" source="gf" target="gsp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ge2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#107C10;strokeWidth=3;" edge="1" parent="1" source="gsp" target="gstore"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ge3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#107C10;strokeWidth=3;" edge="1" parent="1" source="gstore" target="g202"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="tell" value="HOW TO TELL THE TWO APART IN 30 SECONDS&#10;&#10;A LIVE permission failure       →  StorageBlobLogs shows a GetBlobProperties with StatusCode 403 and the calling object id.&#10;A REPLAYED terminal job result  →  the poll URL is unchanged, storage sees NO request at all, and the 403 body is byte-identical.&#10;&#10;the platform lead's 2026-08-14 retest hit the second case: the new file imported (so the grant worked), while the old file kept returning the&#10;cached OperationOutcome from the job that failed the day before. Force a NEW job id to retest — copy the NDJSON to a new blob path." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CE;strokeColor=#D29200;fontColor=#605E5C;fontSize=10;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="530" width="1080" height="150" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

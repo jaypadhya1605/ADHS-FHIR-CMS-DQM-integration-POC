@@ -1,0 +1,378 @@
+<!--
+=============================================================================
+ OUTBOUND (payer-facing) policy  -  __PAYER_KEY__
+=============================================================================
+ This is the policy that makes the agreed architecture actually work.
+
+ The FHIR service is a PHYSICAL boundary per payer. Everything finer than that
+ - contract-level filtering, inbound/outbound separation, rate limiting - is
+ enforced here, because AHDS RBAC has no concept of "contract".
+
+ Microsoft HLS, 2026-08-12:
+   "the physical separation should be as coarse as we can get it. And then the
+    contracts and all this stuff should be handled by APIM."
+
+ WHY A PAYER CANNOT BYPASS THIS GATEWAY
+   The payer's Entra application is granted NO Azure RBAC role on the FHIR
+   service. Its token is therefore authenticated but not authorized if presented
+   to AHDS directly - AHDS returns 403. Only APIM's managed identity holds the
+   FHIR data role, and APIM only ever uses it after the checks below pass.
+=============================================================================
+-->
+<policies>
+    <inbound>
+        <base />
+
+        <!-- =================================================================
+             LAYER 1 - AUTHENTICATION (SMART on FHIR Backend Services)
+             The payer obtained this token via client_credentials against Entra.
+             ================================================================= -->
+        <validate-jwt header-name="Authorization"
+                      failed-validation-httpcode="401"
+                      failed-validation-error-message="Unauthorized. A SMART Backend Services access token is required."
+                      output-token-variable-name="jwt"
+                      require-expiration-time="true"
+                      require-signed-tokens="true">
+            <openid-config url="https://login.microsoftonline.com/__TENANT_ID__/v2.0/.well-known/openid-configuration" />
+            <audiences>
+                <audience>__FHIR_AUDIENCE__</audience>
+            </audiences>
+            <issuers>
+                <issuer>https://sts.windows.net/__TENANT_ID__/</issuer>
+                <issuer>https://login.microsoftonline.com/__TENANT_ID__/v2.0</issuer>
+            </issuers>
+        </validate-jwt>
+
+        <!-- =================================================================
+             LAYER 2 - ENTITLEMENT
+             Resolve the calling application to the contracts it may see.
+             In production this lookup is your contract master (a cached call to
+             an internal API). Here it is a named value so the POC is
+             self-contained and readable in the portal.
+             ================================================================= -->
+        <set-variable name="callerAppId" value="@{
+            var jwt = (Jwt)context.Variables["jwt"];
+            string[] v;
+            if (jwt.Claims.TryGetValue("azp", out v) &amp;&amp; v.Length &gt; 0) { return v[0]; }
+            if (jwt.Claims.TryGetValue("appid", out v) &amp;&amp; v.Length &gt; 0) { return v[0]; }
+            return "";
+        }" />
+
+        <set-variable name="entitlement" value="@{
+            // The named value stores JSON with single quotes so it can be embedded
+            // in a policy expression without escaping. Swap them back to parse.
+            var raw = "{{payer-entitlements}}".Replace((char)39, (char)34);
+            var map = JObject.Parse(raw);
+            var appId = (string)context.Variables["callerAppId"];
+            var e = map[appId];
+            return e == null ? "" : e.ToString(Newtonsoft.Json.Formatting.None);
+        }" />
+
+        <choose>
+            <when condition="@(string.IsNullOrEmpty((string)context.Variables["entitlement"]))">
+                <return-response>
+                    <set-status code="403" reason="Forbidden" />
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/fhir+json</value>
+                    </set-header>
+                    <set-body>@{
+                        return new JObject(
+                            new JProperty("resourceType", "OperationOutcome"),
+                            new JProperty("issue", new JArray(new JObject(
+                                new JProperty("severity", "error"),
+                                new JProperty("code", "forbidden"),
+                                new JProperty("diagnostics", "Calling application " + (string)context.Variables["callerAppId"] + " is not onboarded to any contract on this payer endpoint. Complete payer onboarding first.")
+                            )))
+                        ).ToString();
+                    }</set-body>
+                </return-response>
+            </when>
+        </choose>
+
+        <!-- The payer this endpoint serves, and the contracts this caller holds. -->
+        <set-variable name="payerKey" value="@(JObject.Parse((string)context.Variables["entitlement"])["payer"].ToString())" />
+        <set-variable name="contractTags" value="@{
+            var e = JObject.Parse((string)context.Variables["entitlement"]);
+            var tags = e["contracts"].Select(c =&gt; "https://providence.org/fhir/contract|" + c.ToString());
+            return string.Join(",", tags);
+        }" />
+
+        <!-- Cross-payer guard: an entitlement issued for payer B must never be
+             usable on payer A's endpoint, even if the token validates. -->
+        <choose>
+            <when condition="@((string)context.Variables["payerKey"] != "__PAYER_KEY__")">
+                <return-response>
+                    <set-status code="403" reason="Forbidden" />
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/fhir+json</value>
+                    </set-header>
+                    <set-body>@{
+                        return new JObject(
+                            new JProperty("resourceType", "OperationOutcome"),
+                            new JProperty("issue", new JArray(new JObject(
+                                new JProperty("severity", "error"),
+                                new JProperty("code", "forbidden"),
+                                new JProperty("diagnostics", "This credential is entitled to payer '" + (string)context.Variables["payerKey"] + "' and cannot be used against payer '__PAYER_KEY__'.")
+                            )))
+                        ).ToString();
+                    }</set-body>
+                </return-response>
+            </when>
+        </choose>
+
+        <!-- =================================================================
+             LAYER 3 - ROUTE ALLOW-LIST (the outbound / inbound split)
+             Platform Engineering, 2026-08-12:
+               "for inbound and outbound data, can it be isolated from each
+                other within one service? we don't want payer to query our
+                inbound data."
+             The answer is this block. One FHIR service, two APIM APIs, two
+             different allow-lists. This one cannot write and cannot import.
+             ================================================================= -->
+        <set-variable name="op" value="@{
+            var p = context.Request.Url.Path.ToLower();
+            var m = context.Request.Method.ToUpper();
+            if (p.Contains("/$export")) { return "export"; }
+            if (p.Contains("/_operations/export")) { return "poll"; }
+            if (p.EndsWith("/metadata")) { return "metadata"; }
+            if (p.Contains("/.well-known/smart-configuration")) { return "smartconfig"; }
+            if (m == "GET") { return "search"; }
+            return "denied";
+        }" />
+
+        <choose>
+            <when condition="@((string)context.Variables["op"] == "denied")">
+                <return-response>
+                    <set-status code="403" reason="Forbidden" />
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/fhir+json</value>
+                    </set-header>
+                    <set-body>@{
+                        return new JObject(
+                            new JProperty("resourceType", "OperationOutcome"),
+                            new JProperty("issue", new JArray(new JObject(
+                                new JProperty("severity", "error"),
+                                new JProperty("code", "forbidden"),
+                                new JProperty("diagnostics", "The outbound endpoint is read-only. " + context.Request.Method + " is not permitted. Inbound ingest is a separate, separately-authorised endpoint.")
+                            )))
+                        ).ToString();
+                    }</set-body>
+                </return-response>
+            </when>
+        </choose>
+
+        <!-- =================================================================
+             LAYER 4a - GROUP-SCOPED BULK EXPORT
+             The CMS-0057-F path. A payer may only export a Group that belongs
+             to one of its own contracts. This is what stops "the open query".
+             ================================================================= -->
+        <choose>
+            <when condition="@((string)context.Variables["op"] == "export")">
+                <set-variable name="requestedGroup" value="@{
+                    var segs = context.Request.Url.Path.Split('/');
+                    for (int i = 0; i &lt; segs.Length; i++) {
+                        if (segs[i].Equals("Group", StringComparison.OrdinalIgnoreCase) &amp;&amp; i + 1 &lt; segs.Length) {
+                            return segs[i + 1];
+                        }
+                    }
+                    return "";
+                }" />
+                <choose>
+                    <!-- System-level $export (no Group) is never allowed for a payer. -->
+                    <when condition="@(string.IsNullOrEmpty((string)context.Variables["requestedGroup"]))">
+                        <return-response>
+                            <set-status code="403" reason="Forbidden" />
+                            <set-header name="Content-Type" exists-action="override">
+                                <value>application/fhir+json</value>
+                            </set-header>
+                            <set-body>@{
+                                return new JObject(
+                                    new JProperty("resourceType", "OperationOutcome"),
+                                    new JProperty("issue", new JArray(new JObject(
+                                        new JProperty("severity", "error"),
+                                        new JProperty("code", "forbidden"),
+                                        new JProperty("diagnostics", "System-level and Patient-level $export are not available to payers. Use Group/{groupId}/$export with a Group from your own contract.")
+                                    )))
+                                ).ToString();
+                            }</set-body>
+                        </return-response>
+                    </when>
+                    <when condition="@{
+                        var e = JObject.Parse((string)context.Variables["entitlement"]);
+                        var g = (string)context.Variables["requestedGroup"];
+                        return !e["groups"].Select(x =&gt; x.ToString()).Contains(g);
+                    }">
+                        <return-response>
+                            <set-status code="403" reason="Forbidden" />
+                            <set-header name="Content-Type" exists-action="override">
+                                <value>application/fhir+json</value>
+                            </set-header>
+                            <set-body>@{
+                                return new JObject(
+                                    new JProperty("resourceType", "OperationOutcome"),
+                                    new JProperty("issue", new JArray(new JObject(
+                                        new JProperty("severity", "error"),
+                                        new JProperty("code", "forbidden"),
+                                        new JProperty("diagnostics", "Group '" + (string)context.Variables["requestedGroup"] + "' does not belong to a contract held by this caller.")
+                                    )))
+                                ).ToString();
+                            }</set-body>
+                        </return-response>
+                    </when>
+                </choose>
+                <set-header name="Prefer" exists-action="override">
+                    <value>respond-async</value>
+                </set-header>
+                <!-- AHDS rejects $export with HTTP 400 "Value supplied, , for the
+                     Accept header is not supported" when Accept is absent or */*.
+                     Most HTTP clients send */* by default, so without this every
+                     payer's first export call fails for a reason that has nothing
+                     to do with them. Normalising it here is the gateway earning
+                     its keep: the payer does not need to know AHDS's quirks. -->
+                <set-header name="Accept" exists-action="override">
+                    <value>application/fhir+json</value>
+                </set-header>
+            </when>
+        </choose>
+
+        <!-- =================================================================
+             LAYER 4b - CONTRACT TAG INJECTION ON SEARCH
+             This is the mechanism Enterprise Architecture agreed to on 2026-08-12: contracts are
+             a LOGICAL boundary inside a payer instance, expressed as meta.tag
+             and enforced with the _tag search parameter.
+
+             Any caller-supplied _tag is DISCARDED and replaced. A payer cannot
+             widen its own scope by editing the query string.
+             ================================================================= -->
+        <choose>
+            <when condition="@((string)context.Variables["op"] == "search")">
+                <!-- exists-action="override" discards anything the caller sent.
+                     Multiple contracts become a comma-separated _tag, which FHIR
+                     evaluates as OR - exactly the semantics we want. -->
+                <set-query-parameter name="_tag" exists-action="override">
+                    <value>@((string)context.Variables["contractTags"])</value>
+                </set-query-parameter>
+                <set-header name="Accept" exists-action="override">
+                    <value>application/fhir+json</value>
+                </set-header>
+            </when>
+        </choose>
+
+        <!-- =================================================================
+             LAYER 5 - RATE LIMIT PER PAYER
+             Enterprise Architecture, 2026-08-12: 800,000 patients across ~40 payers, and
+             "usually happens at the same time ... will pop the server itself."
+             The gateway is where you stop that, not the FHIR service.
+             ================================================================= -->
+        <rate-limit-by-key calls="600"
+                           renewal-period="60"
+                           counter-key="@((string)context.Variables["callerAppId"])"
+                           increment-condition="@(context.Response == null || context.Response.StatusCode != 429)" />
+        <quota-by-key calls="50000" renewal-period="86400" counter-key="@((string)context.Variables["callerAppId"])" />
+
+        <!-- Only ONE bulk export per payer per window. Expressed as an explicit
+             lock rather than a second <rate-limit-by-key>: two rate-limit
+             policies in one section do not both take effect, and the failure is
+             silent - the second one simply never fires. A cache entry is also a
+             truer model of the intent. This is a LOCK, not a rate.
+
+             This is the single most effective control against the concurrent-
+             export thundering herd, so it needs to be the one thing here that
+             cannot quietly stop working. -->
+        <choose>
+            <when condition="@((string)context.Variables["op"] == "export")">
+                <cache-lookup-value key="@("exportlock-" + (string)context.Variables["payerKey"])"
+                                    variable-name="exportLock" caching-type="internal" />
+                <choose>
+                    <when condition="@(context.Variables.ContainsKey("exportLock"))">
+                        <return-response>
+                            <set-status code="429" reason="Too Many Requests" />
+                            <set-header name="Retry-After" exists-action="override">
+                                <value>300</value>
+                            </set-header>
+                            <set-header name="Content-Type" exists-action="override">
+                                <value>application/fhir+json</value>
+                            </set-header>
+                            <set-body>@{
+                                return new JObject(
+                                    new JProperty("resourceType", "OperationOutcome"),
+                                    new JProperty("issue", new JArray(new JObject(
+                                        new JProperty("severity", "error"),
+                                        new JProperty("code", "throttled"),
+                                        new JProperty("diagnostics", "An export job is already in progress for this payer. One concurrent bulk export is permitted; retry after 300 seconds. This limit exists to keep simultaneous payer exports from saturating the FHIR service.")
+                                    )))
+                                ).ToString();
+                            }</set-body>
+                        </return-response>
+                    </when>
+                    <otherwise>
+                        <cache-store-value key="@("exportlock-" + (string)context.Variables["payerKey"])"
+                                           value="1" duration="300" caching-type="internal" />
+                    </otherwise>
+                </choose>
+            </when>
+        </choose>
+
+        <!-- =================================================================
+             LAYER 6 - TRUSTED BROKER
+             Swap the payer's token for APIM's own managed identity token. The
+             payer credential never reaches AHDS.
+             ================================================================= -->
+        <authentication-managed-identity resource="__FHIR_AUDIENCE__" output-token-variable-name="msi" ignore-error="false" />
+        <set-header name="Authorization" exists-action="override">
+            <value>@("Bearer " + (string)context.Variables["msi"])</value>
+        </set-header>
+
+        <!-- Audit trail: who asked for what, on whose behalf. -->
+        <set-header name="X-Providence-Caller" exists-action="override">
+            <value>@((string)context.Variables["callerAppId"])</value>
+        </set-header>
+        <set-header name="X-Providence-Payer" exists-action="override">
+            <value>__PAYER_KEY__</value>
+        </set-header>
+    </inbound>
+
+    <backend>
+        <base />
+    </backend>
+
+    <outbound>
+        <base />
+        <!-- Never leak backend infrastructure detail to a payer. -->
+        <set-header name="X-Powered-By" exists-action="delete" />
+        <set-header name="X-AspNet-Version" exists-action="delete" />
+        <!-- Rewrite the async polling Content-Location so the payer keeps talking
+             to the gateway instead of discovering the raw AHDS hostname. -->
+        <choose>
+            <when condition="@(context.Response.Headers.ContainsKey("Content-Location"))">
+                <set-header name="Content-Location" exists-action="override">
+                    <value>@{
+                        var raw = context.Response.Headers.GetValueOrDefault("Content-Location", "");
+                        return raw.Replace("__FHIR_AUDIENCE__", context.Request.OriginalUrl.Scheme + "://" + context.Request.OriginalUrl.Host + "/__PAYER_KEY__/outbound");
+                    }</value>
+                </set-header>
+            </when>
+        </choose>
+        <set-header name="X-Providence-Contract-Scope" exists-action="override">
+            <value>@((string)context.Variables["contractTags"])</value>
+        </set-header>
+    </outbound>
+
+    <on-error>
+        <base />
+        <set-header name="Content-Type" exists-action="override">
+            <value>application/fhir+json</value>
+        </set-header>
+        <set-body>@{
+            return new JObject(
+                new JProperty("resourceType", "OperationOutcome"),
+                new JProperty("issue", new JArray(new JObject(
+                    new JProperty("severity", "error"),
+                    new JProperty("code", "exception"),
+                    new JProperty("diagnostics", context.LastError?.Message ?? "Gateway error"),
+                    new JProperty("details", new JObject(new JProperty("text", "correlationId=" + context.RequestId)))
+                )))
+            ).ToString();
+        }</set-body>
+    </on-error>
+</policies>

@@ -1,0 +1,222 @@
+###############################################################################
+# Providence CMS-0057-F — isolation proofs
+#
+# These are the security guarantees, written as assertions. Each case states the
+# expected status code. A green run is the argument; the prose in docs/ is only
+# commentary on it.
+#
+# Run with the VS Code REST Client extension, or `curl` the equivalents.
+# Populate the variables from:  ./scripts/show-env.ps1
+###############################################################################
+
+@gateway     = https://REPLACE-apim.azure-api.net
+@tenant      = 16b3c013-d300-468d-ac64-7eda0820b6d3
+@fhirA       = https://REPLACE-ws-fhir-payera.fhir.azurehealthcareapis.com
+@fhirB       = https://REPLACE-ws-fhir-payerb.fhir.azurehealthcareapis.com
+
+@payerAAppId = REPLACE
+@payerASecret= REPLACE
+@payerBAppId = REPLACE
+@payerBSecret= REPLACE
+
+@groupA1     = group-ct3456
+@groupA2     = group-ct7788
+@groupB1     = group-ct9001
+
+
+###############################################################################
+# TOKENS — SMART Backend Services shape (client_credentials, no user present)
+###############################################################################
+
+# @name tokenA
+POST https://login.microsoftonline.com/{{tenant}}/oauth2/v2.0/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id={{payerAAppId}}&client_secret={{payerASecret}}&scope={{fhirA}}/.default
+
+###
+@tokA = {{tokenA.response.body.access_token}}
+
+# @name tokenB
+POST https://login.microsoftonline.com/{{tenant}}/oauth2/v2.0/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id={{payerBAppId}}&client_secret={{payerBSecret}}&scope={{fhirB}}/.default
+
+###
+@tokB = {{tokenB.response.body.access_token}}
+
+
+###############################################################################
+# BASELINE — the happy path must work, or the negatives prove nothing
+###############################################################################
+
+### [1] EXPECT 200 — Payer A reads its own cohort.
+# The request carries no _tag. The outbound policy injects
+#   _tag=https://providence.org/fhir/contract|CT-3456,...|CT-7788
+# before it reaches AHDS. The payer cannot opt out of the filter, because a
+# supplied _tag is overwritten rather than merged.
+GET {{gateway}}/payera/outbound/Patient?_count=5
+Authorization: Bearer {{tokA}}
+Accept: application/fhir+json
+
+### [2] EXPECT 202 — Group-scoped bulk export, the CMS-0057-F verb.
+# Prefer: respond-async is added by the policy if the client omits it.
+# Response carries Content-Location rewritten to the gateway host, so the payer
+# never learns the AHDS endpoint.
+GET {{gateway}}/payera/outbound/Group/{{groupA1}}/$export?_type=Patient,Coverage,ExplanationOfBenefit
+Authorization: Bearer {{tokA}}
+Accept: application/fhir+json
+Prefer: respond-async
+
+### [3] EXPECT 200 — capability statement and SMART discovery are open.
+GET {{gateway}}/payera/outbound/metadata
+Authorization: Bearer {{tokA}}
+
+###
+GET {{gateway}}/payera/outbound/.well-known/smart-configuration
+Authorization: Bearer {{tokA}}
+
+
+###############################################################################
+# CROSS-PAYER — the architecture lead's PHI boundary
+###############################################################################
+
+### [4] EXPECT 403 — Payer B's credential on Payer A's route.
+# Caught by the cross-payer guard: the entitlement record for this appId says
+# payer=payerb, the route says payera, mismatch rejected before routing.
+# This is the check that makes physical separation meaningful rather than
+# decorative.
+GET {{gateway}}/payera/outbound/Patient?_count=5
+Authorization: Bearer {{tokB}}
+Accept: application/fhir+json
+
+### [5] EXPECT 401 — Payer A's token has the wrong audience for Payer B's FHIR service.
+# Even before entitlement, validate-jwt rejects it. Two independent gates.
+GET {{gateway}}/payerb/outbound/Patient?_count=5
+Authorization: Bearer {{tokA}}
+Accept: application/fhir+json
+
+### [6] EXPECT 403 — Payer A requests a Group it is not entitled to.
+# Inside the correct payer and with a valid token, but groupId is not in the
+# entitlement's groups[]. This is the contract-level (logical) boundary.
+GET {{gateway}}/payera/outbound/Group/{{groupB1}}/$export
+Authorization: Bearer {{tokA}}
+Prefer: respond-async
+
+
+###############################################################################
+# INBOUND / OUTBOUND — the platform lead's question
+###############################################################################
+
+### [7] EXPECT 403 — a payer cannot write on the outbound route.
+# Route allow-list classifies any non-GET as denied.
+POST {{gateway}}/payera/outbound/Patient
+Authorization: Bearer {{tokA}}
+Content-Type: application/fhir+json
+
+{ "resourceType": "Patient", "id": "should-never-exist" }
+
+### [8] EXPECT 403 — a payer credential is not in ingest-principals.
+# Even knowing the inbound URL gains nothing.
+POST {{gateway}}/payera/inbound/Patient
+Authorization: Bearer {{tokA}}
+Content-Type: application/fhir+json
+X-Providence-Contract: CT-3456
+
+{ "resourceType": "Patient", "id": "should-never-exist" }
+
+### [9] EXPECT 403 — $export is denied on the inbound route entirely.
+# "we don't want payer to query our inbound data"
+GET {{gateway}}/payera/inbound/Group/{{groupA1}}/$export
+Authorization: Bearer {{tokA}}
+Prefer: respond-async
+
+
+###############################################################################
+# EXPORT SCOPE — bounding the working set
+###############################################################################
+
+### [10] EXPECT 403 — system-level export.
+# Would attempt the entire instance. Never permitted to a payer.
+GET {{gateway}}/payera/outbound/$export
+Authorization: Bearer {{tokA}}
+Prefer: respond-async
+
+### [11] EXPECT 403 — patient-level export.
+# Unbounded across all patients in the instance. Group-scoped only.
+GET {{gateway}}/payera/outbound/Patient/$export
+Authorization: Bearer {{tokA}}
+Prefer: respond-async
+
+
+###############################################################################
+# GATEWAY BYPASS — the control that makes the whole model hold
+###############################################################################
+
+### [12] EXPECT 403 — the payer token presented directly to AHDS.
+# Note carefully: NOT 401. The token is valid and correctly audienced — Entra
+# issued it for this FHIR service. It fails AUTHORISATION, because the payer's
+# app registration holds no Azure RBAC role on the FHIR service. Only APIM's
+# managed identity does.
+#
+# This is why "we enforce it at APIM" is a real boundary and not a speed bump.
+GET {{fhirA}}/Patient?_count=5
+Authorization: Bearer {{tokA}}
+Accept: application/fhir+json
+
+
+###############################################################################
+# TAG INTEGRITY — the logical boundary cannot be argued away by the caller
+###############################################################################
+
+### [13] EXPECT 200, filtered — caller supplies a _tag for a contract it does not hold.
+# set-query-parameter uses exists-action="override", so the supplied value is
+# replaced, not merged. Results still contain only CT-3456 and CT-7788.
+# Inspect the returned Bundle: no CT-9001 entries.
+GET {{gateway}}/payera/outbound/Patient?_tag=https://providence.org/fhir/contract|CT-9001&_count=20
+Authorization: Bearer {{tokA}}
+Accept: application/fhir+json
+
+### [14] EXPECT 400 — inbound write with no contract header.
+# An untagged resource would be invisible to every payer. Rejecting at the
+# boundary is better than silently orphaning data.
+POST {{gateway}}/payera/inbound/Patient
+Authorization: Bearer {{tokA}}
+Content-Type: application/fhir+json
+
+{ "resourceType": "Patient", "id": "untagged-reject" }
+
+
+###############################################################################
+# RATE LIMITING — the export-burst mitigation
+###############################################################################
+
+### [15] EXPECT 429 on the second call within 5 minutes.
+# One concurrent $export per payer. Converts a synchronised burst into a queue,
+# which is the only lever available until the load test produces real numbers.
+# Run [2] first, then this immediately.
+GET {{gateway}}/payera/outbound/Group/{{groupA2}}/$export
+Authorization: Bearer {{tokA}}
+Prefer: respond-async
+
+
+###############################################################################
+# SUMMARY
+#
+#   1  200   own data readable
+#   2  202   Group export accepted
+#   3  200   metadata / SMART discovery
+#   4  403   cross-payer credential            <- payer boundary
+#   5  401   wrong audience                    <- payer boundary
+#   6  403   unentitled Group                  <- contract boundary
+#   7  403   write on outbound                 <- direction boundary
+#   8  403   payer on inbound                  <- direction boundary
+#   9  403   export on inbound                 <- the platform lead's question
+#  10  403   system-level export               <- scope bound
+#  11  403   patient-level export              <- scope bound
+#  12  403   direct-to-AHDS bypass             <- the keystone control
+#  13  200   _tag override, filtered           <- tag integrity
+#  14  400   untagged write rejected           <- tag integrity
+#  15  429   export concurrency                <- burst mitigation
+###############################################################################
