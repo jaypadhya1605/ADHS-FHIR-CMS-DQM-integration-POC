@@ -129,14 +129,43 @@ Empty result while `$import` returns 403 ⇒ the 403 is cached.
 
 ### Retesting correctly
 
-Never retest by re-polling. Force a new job id:
+Re-polling the old job will never change its answer. But re-**submitting** the same request does not
+help either, and that is the part that is easy to miss.
 
-1. Copy the NDJSON to a new blob path (`pdex/retest-<timestamp>/...`).
-2. Issue a fresh `POST {fhir}/$import`.
-3. Confirm the returned `Content-Location` job id **differs** from the previous one.
-4. Poll the new URL.
+**`$import` registration is idempotent on the request payload.** An identical body returns the
+existing registration instead of creating a new job, so a re-POST after a permissions fix hands back
+the same terminal failure. This is documented behaviour, not a defect.
 
-Implemented as `-Force` in [scripts/run-import.ps1](../scripts/run-import.ps1).
+The blob URL is the dominant part of that payload, which is why copying the file to a new path looked
+like the fix. The path was incidental — what mattered was that the payload changed.
+
+To force a new job, change the payload. The supported lever is the optional `etag` on each input:
+
+```json
+"part": [
+  { "name": "url",  "valueUri": "https://<storage>.blob.core.windows.net/pdex/payera/Patient.ndjson" },
+  { "name": "etag", "valueUri": "\"0x8DC5F1A2B3C4D5E\"" }
+]
+```
+
+A blob's ETag changes on every write, so a pipeline that rewrites the file to a fixed path gets a new
+registration for free. When the blob is genuinely unchanged — a pure configuration fix, as here — a
+metadata write bumps the ETag without touching the content or the path.
+
+That is what `-Force` does in [scripts/run-import.ps1](../scripts/run-import.ps1):
+
+1. Write metadata to each input blob → new ETag.
+2. Read the new ETags into the registration payload.
+3. `POST {fhir}/$import`.
+4. Confirm the returned `Content-Location` job id **differs** from the previous one.
+5. Poll the new URL.
+
+Carrying the ETag has a second benefit: it verifies the file has not changed between registration and
+processing, so a mid-import overwrite fails loudly rather than silently importing something you did
+not register.
+
+Pipeline guidance for deterministic blob paths:
+[runbooks/import-troubleshooting.md](../runbooks/import-troubleshooting.md).
 
 ---
 
@@ -169,3 +198,7 @@ is the fastest available diagnostic and is built into the error handling in
    that hides the real problem until production.
 5. **Add a smoke test** that runs `$import` of a single-row NDJSON after every environment change.
    Ninety seconds, and it catches this class of failure before a payer does.
+6. **Key pipeline run state on the job id, never the blob path.** Carry the blob ETag in the
+   registration payload so a rewritten file always produces a new job. Both halves of the 8/14
+   confusion — the replayed poll and the deduplicated re-submit — disappear once run state tracks
+   the job rather than the file.

@@ -97,14 +97,77 @@ Allow a few minutes for propagation.
 
 ### Then retest correctly
 
-Never re-poll. Force a new job:
+Do not re-poll, and do not simply re-POST the same body — registration is idempotent on the request
+payload, so an identical submission returns the old failed job. Force a new one:
 
 ```powershell
 ./scripts/run-import.ps1 -PayerKey payera -Force
 ```
 
-Confirm the new `Content-Location` job id **differs** from the previous one. If it does not, you are
-reading the old job again.
+Confirm the new `Content-Location` job id **differs** from the previous one. If it does not, the
+payload did not change and you are reading the old job again. See the next section for why.
+
+---
+
+## Retrying an import on a deterministic blob path
+
+The situation: the pipeline writes to fixed paths
+(`.../FhirExplanationOfBenefit-1026/part-000001.ndjson`), an import failed, the cause has been fixed,
+and the blob cannot be renamed.
+
+**Unique blob names are not required. A unique registration *payload* is.**
+
+`$import` registration is idempotent on the request body — an identical payload returns the existing
+job rather than creating a new one, so a re-POST replays the old failure. Adding the optional `etag`
+to each input ties the payload to blob content and resolves it:
+
+```json
+{
+  "name": "input",
+  "part": [
+    { "name": "type", "valueString": "ExplanationOfBenefit" },
+    { "name": "url",  "valueUri": "https://<storage>.blob.core.windows.net/pdex/FhirExplanationOfBenefit-1026/part-000001.ndjson" },
+    { "name": "etag", "valueUri": "\"0x8DC5F1A2B3C4D5E\"" }
+  ]
+}
+```
+
+### The pipeline pattern
+
+| Step | Action |
+|---|---|
+| 1 | Read blob properties; capture `properties.etag` for every input file |
+| 2 | `POST {fhir}/$import` with `url` **and** `etag` on each input |
+| 3 | Store the **job id** from `Content-Location` in run state — not the blob path |
+| 4 | Poll the job id to a terminal state |
+| 5 | On failure: fix the cause, rewrite the blob (new ETag), return to step 1 |
+
+Step 3 is the one that gets skipped. Keying run state on the blob path makes the path do double duty
+as both "what to import" and "which job to check" — which is exactly how a replayed 403 gets
+mistaken for a live one.
+
+### When the blob has not changed
+
+A configuration fix — RBAC, firewall, networking — leaves the file byte-identical, so the ETag is
+unchanged and the payload still deduplicates. A metadata write bumps the ETag while content and path
+stay put:
+
+```powershell
+az storage blob metadata update --account-name <storage> --auth-mode login `
+  -c pdex -n <path> --metadata importRetry=$(Get-Date -Format yyyyMMddHHmmss)
+```
+
+Re-read the ETag, then resubmit. `./scripts/run-import.ps1 -Force` does exactly this.
+
+### Mode
+
+Use `IncrementalLoad` — the default. It is safe to re-run over the same file, because matching
+resource ids are updated in place, and it does not block API writes. `InitialLoad` locks the service
+and returns `423 Locked` to concurrent operations; correct for a first bulk load, wrong for anything
+retryable.
+
+Reference:
+[Import data into the FHIR service](https://learn.microsoft.com/azure/healthcare-apis/fhir/import-data).
 
 ---
 

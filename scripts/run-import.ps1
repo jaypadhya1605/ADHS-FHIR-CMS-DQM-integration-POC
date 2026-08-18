@@ -11,9 +11,11 @@
 
   The script also demonstrates the two behaviours that confused the dev retest:
 
-    * A terminal import job is IMMUTABLE. Re-polling a job that failed replays
-      the stored OperationOutcome; it is not a fresh authorisation decision.
-      -Force writes to a new blob path so a genuinely new job id is created.
+    * A terminal import job is IMMUTABLE, and registration is IDEMPOTENT on the
+      request payload. Re-polling replays the stored OperationOutcome; re-POSTing
+      an identical body returns that same job rather than creating a new one.
+      -Force bumps each input blob's ETag via a metadata write, so the payload
+      differs and a genuinely new job id is created - same path, same content.
     * Partial success is normal. `error[]` in the completion payload points at a
       per-file OperationOutcome NDJSON. A non-empty error[] with a populated
       output[] means "most rows landed", not "the import failed".
@@ -61,9 +63,22 @@ foreach ($svc in $targets) {
   $ordered = @($blobList | Where-Object { $_ -notmatch 'Group\.ndjson$' }) +
              @($blobList | Where-Object { $_ -match  'Group\.ndjson$' })
 
+  # A metadata write changes the blob's ETag without touching content or path,
+  # which is what makes the registration payload differ on a config-fix retry.
+  if ($Force) {
+    $stamp = Get-Date -Format 'yyyyMMddHHmmss'
+    foreach ($b in $ordered) {
+      az storage blob metadata update --account-name $storage --auth-mode login `
+        -c pdex -n $b --metadata importRetry=$stamp | Out-Null
+    }
+    Write-Host "  -Force: bumped ETag on $($ordered.Count) blob(s)" -ForegroundColor DarkYellow
+  }
+
   $input = foreach ($b in $ordered) {
     $type = [System.IO.Path]::GetFileNameWithoutExtension($b)
-    @{ type = $type; url = "$blobBase/pdex/$b"; etag = '' }
+    $etag = az storage blob show --account-name $storage --auth-mode login `
+              -c pdex -n $b --query properties.etag -o tsv
+    @{ type = $type; url = "$blobBase/pdex/$b"; etag = $etag }
   }
 
   $body = @{
@@ -75,6 +90,7 @@ foreach ($svc in $targets) {
             @{ name = 'input'; part = @(
                 @{ name = 'type'; valueString = $_.type }
                 @{ name = 'url';  valueUri    = $_.url }
+                @{ name = 'etag'; valueUri    = $_.etag }
               ) }
           }) }
     )
@@ -142,7 +158,8 @@ foreach ($svc in $targets) {
     Live  -> StorageBlobLogs | where OperationName == 'GetBlobProperties' and StatusCode == 403
              will show a row with the calling object id in the last 5 minutes.
     Cached-> storage sees NO request. The job is terminal; the body is a replay.
-             Re-run with -Force to create a genuinely new job id.
+             Re-submitting the same payload returns this same job - registration
+             is idempotent. Re-run with -Force to bump the ETag and get a new id.
 "@ -ForegroundColor Yellow
     }
     break
